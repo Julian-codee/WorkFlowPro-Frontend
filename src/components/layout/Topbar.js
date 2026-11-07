@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils/cn";
 const MOBILE_NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/tasks", label: "Tareas" },
+  { href: "/customers", label: "Clientes" },
   { href: "/settings/profile", label: "Mi perfil" },
 ];
 
@@ -19,6 +20,8 @@ const SECTION_TITLES = {
   "/dashboard": "Dashboard",
   "/tasks": "Tareas",
   "/tasks/new": "Nueva tarea",
+  "/customers": "Clientes",
+  "/customers/new": "Nuevo cliente",
   "/settings/profile": "Mi perfil",
 };
 
@@ -29,7 +32,13 @@ export default function Topbar() {
   const pathname = usePathname();
   const { user, logout, isLoggingOut } = useSession();
 
-  const title = SECTION_TITLES[pathname] ?? (pathname.startsWith("/tasks/") ? "Detalle de tarea" : "WorkFlowPro");
+  const title =
+    SECTION_TITLES[pathname] ??
+    (pathname.startsWith("/tasks/")
+      ? "Detalle de tarea"
+      : pathname.startsWith("/customers/")
+        ? "Ficha de cliente"
+        : "WorkFlowPro");
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);

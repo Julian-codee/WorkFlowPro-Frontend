@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { ToastProvider } from "@/components/ui";
 import { fetchCurrentUser, restoreSession } from "@/lib/auth/session";
-import { getCurrentUser } from "@/lib/auth/tokenStore";
+import { getCurrentUser, isAuthenticated } from "@/lib/auth/tokenStore";
 
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
@@ -36,6 +36,9 @@ export default function AppShell({ children, title }) {
         }
 
         // Sesión en memoria (sin persistencia): recuperamos el usuario.
+        // Sin access token no hay nada que consultar contra el backend.
+        if (!isAuthenticated()) return;
+
         const current = await fetchCurrentUser();
         if (active) setUser(current);
       } catch {
