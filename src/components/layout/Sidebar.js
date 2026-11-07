@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListTodo, Settings2, Sparkles, Users } from "lucide-react";
+import { LayoutDashboard, ListTodo, Settings2, Sparkles, Users, DollarSign, FileSpreadsheet } from "lucide-react";
 
 import { cn } from "@/lib/utils/cn";
 
@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tasks", label: "Tareas", icon: ListTodo },
   { href: "/customers", label: "Clientes", icon: Users },
+  { href: "/", label: "Finanzas", icon: DollarSign},
+  { href: "/", label: "Cotizaciones", icon: FileSpreadsheet},
   { href: "/settings/profile", label: "Mi perfil", icon: Settings2 },
 ];
 
