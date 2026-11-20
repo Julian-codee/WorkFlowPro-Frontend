@@ -10,8 +10,8 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tasks", label: "Tareas", icon: ListTodo },
   { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/", label: "Finanzas", icon: DollarSign},
-  { href: "/", label: "Cotizaciones", icon: FileSpreadsheet},
+  { href: "/quotations", label: "Cotizaciones", icon: FileSpreadsheet },
+  { href: "/financials", label: "Finanzas", icon: DollarSign},
   { href: "/settings/profile", label: "Mi perfil", icon: Settings2 },
 ];
 

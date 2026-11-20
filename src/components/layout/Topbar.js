@@ -13,6 +13,8 @@ const MOBILE_NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/tasks", label: "Tareas" },
   { href: "/customers", label: "Clientes" },
+  { href: "/quotations", label: "Cotizaciones" },
+  { href: "/financials", label: "Finanzas" },
   { href: "/settings/profile", label: "Mi perfil" },
 ];
 
@@ -22,6 +24,15 @@ const SECTION_TITLES = {
   "/tasks/new": "Nueva tarea",
   "/customers": "Clientes",
   "/customers/new": "Nuevo cliente",
+  "/quotations": "Cotizaciones",
+  "/quotations/new": "Nueva cotización",
+  "/financials": "Finanzas",
+  "/financials/calendar": "Calendario financiero",
+  "/financials/movements": "Movimientos",
+  "/financials/movements/new": "Nuevo movimiento",
+  "/financials/accounts": "Cuentas financieras",
+  "/financials/periods": "Períodos semanales",
+  "/financials/closures": "Cierres de caja",
   "/settings/profile": "Mi perfil",
 };
 
@@ -38,7 +49,11 @@ export default function Topbar() {
       ? "Detalle de tarea"
       : pathname.startsWith("/customers/")
         ? "Ficha de cliente"
-        : "WorkFlowPro");
+        : pathname.startsWith("/quotations/")
+          ? "Detalle de cotización"
+          : pathname.startsWith("/financials/")
+            ? "Finanzas"
+            : "WorkFlowPro");
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
