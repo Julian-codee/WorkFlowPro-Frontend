@@ -40,7 +40,7 @@ export default function TaskCreateView() {
       <PageHeader
         eyebrow="Nueva tarea"
         title="Crear una tarea"
-        description="Define el trabajo, asigna prioridad y fecha para que el equipo sepa qué toca."
+        description="Define el trabajo, su prioridad, vencimiento y los datos financieros necesarios."
         actions={
           <Button variant="outline" onClick={() => router.push("/tasks")}>
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />

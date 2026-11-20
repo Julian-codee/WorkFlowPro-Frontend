@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
 
 import { getTask } from "../services/taskService";
 
-/**
- * Carga el detalle de una tarea (preparado para `GET /tasks/{id}`).
- */
+/** Carga el detalle real de una tarea y lo mantiene sincronizado. */
 export function useTask(id) {
   const [state, setState] = useState({
     id: null,
@@ -15,12 +15,14 @@ export function useTask(id) {
     error: null,
   });
 
+  const fetchTask = useCallback(() => (id ? getTask(id) : Promise.resolve(null)), [id]);
+
   useEffect(() => {
     if (!id) return undefined;
 
     let active = true;
 
-    getTask(id)
+    fetchTask()
       .then((task) => {
         if (!active) return;
         setState({ id, status: "success", task, error: null });
@@ -38,9 +40,27 @@ export function useTask(id) {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [fetchTask, id]);
 
-  // Si cambia el id, la información anterior se descarta.
+  const reload = useCallback(() => {
+    if (!id) return;
+
+    fetchTask()
+      .then((task) => {
+        setState({ id, status: "success", task, error: null });
+      })
+      .catch((requestError) => {
+        setState({
+          id,
+          status: "error",
+          task: null,
+          error: requestError?.message ?? "No pudimos cargar la tarea.",
+        });
+      });
+  }, [fetchTask, id]);
+
+  useDataInvalidation("tasks", reload);
+
   const isCurrent = state.id === id;
 
   return {
@@ -48,7 +68,7 @@ export function useTask(id) {
     status: isCurrent ? state.status : "loading",
     error: isCurrent ? state.error : null,
     isLoading: !isCurrent || state.status === "loading",
-    reload: () => setState({ id: null, status: "loading", task: null, error: null }),
+    reload,
     setTask: (task) => setState({ id, status: "success", task, error: null }),
   };
 }

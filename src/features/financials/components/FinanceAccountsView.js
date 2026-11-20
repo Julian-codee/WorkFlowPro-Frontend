@@ -38,23 +38,21 @@ import FinanceKpiCard from "./FinanceKpiCard";
 
 const INITIAL_ACCOUNT_VALUES = {
   name: "",
+  code: "",
   type: ACCOUNT_TYPES.CASH,
-  currency: "PEN",
-  opening_balance: "0",
-  owner: "",
-  branch: "",
-  notes: "",
+  currency: "COP",
+  status: "active",
+  description: "",
 };
 
 function buildAccountPayload(values) {
   return {
     name: values.name.trim(),
+    code: values.code.trim().toUpperCase(),
     type: values.type,
     currency: values.currency,
-    opening_balance: Number(values.opening_balance),
-    owner: values.owner.trim(),
-    branch: values.branch.trim(),
-    notes: values.notes.trim(),
+    status: values.status,
+    description: values.description.trim(),
   };
 }
 

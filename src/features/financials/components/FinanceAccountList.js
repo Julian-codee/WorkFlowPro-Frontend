@@ -104,11 +104,11 @@ export default function FinanceAccountList({ accounts = [], isLoading = false })
               <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
                 Saldo actual
               </th>
-              <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
-                Saldo inicial
+              <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
+                Código
               </th>
               <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
-                Responsable
+                Descripción
               </th>
               <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
                 Estado
@@ -145,7 +145,7 @@ export default function FinanceAccountList({ accounts = [], isLoading = false })
                           {account.name}
                         </Link>
                         <p className="mt-0.5 truncate text-[11.5px] text-[#94A3B8]">
-                          {account.branch || "Sin sucursal"}
+                          {account.description || "Sin descripción"}
                         </p>
                       </div>
                     </div>
@@ -159,12 +159,12 @@ export default function FinanceAccountList({ accounts = [], isLoading = false })
                     {formatMoney(account.balance, account.currency)}
                   </td>
 
-                  <td className="px-5 py-4 text-right text-[12.5px] tabular-nums text-[#64748B]">
-                    {formatMoney(account.opening_balance, account.currency)}
+                  <td className="px-5 py-4 text-[12.5px] font-medium text-[#475569]">
+                    {account.code || "—"}
                   </td>
 
-                  <td className="px-5 py-4 text-[12.5px] text-[#475569]">
-                    {account.owner || "Sin responsable"}
+                  <td className="max-w-[220px] px-5 py-4 text-[12.5px] text-[#475569]">
+                    <span className="block truncate">{account.description || "—"}</span>
                   </td>
 
                   <td className="px-5 py-4">
@@ -211,7 +211,7 @@ export default function FinanceAccountList({ accounts = [], isLoading = false })
                     {account.name}
                   </p>
                   <p className="mt-0.5 truncate text-[12px] text-[#94A3B8]">
-                    {account.branch || "Sin sucursal"}
+                    {account.code || "Sin código"}
                   </p>
                 </div>
               </div>
@@ -235,17 +235,17 @@ export default function FinanceAccountList({ accounts = [], isLoading = false })
 
                 <div>
                   <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
-                    Saldo inicial
+                    Código
                   </p>
-                  <p className="mt-1 text-[12.5px] tabular-nums text-[#64748B]">
-                    {formatMoney(account.opening_balance, account.currency)}
+                  <p className="mt-1 text-[12.5px] font-medium text-[#475569]">
+                    {account.code || "—"}
                   </p>
                 </div>
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-3 text-[12px]">
                 <span className="truncate text-[#64748B]">
-                  {account.owner || "Sin responsable"}
+                  {account.description || "Sin descripción"}
                 </span>
                 <span className="shrink-0 font-semibold text-[#2E6BFF]">Ver detalle</span>
               </div>

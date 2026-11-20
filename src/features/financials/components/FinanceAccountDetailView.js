@@ -36,24 +36,22 @@ import FinanceAccountForm from "./FinanceAccountForm";
 function getInitialAccountValues(account) {
   return {
     name: account.name ?? "",
+    code: account.code ?? "",
     type: account.type ?? ACCOUNT_TYPES.CASH,
-    currency: account.currency ?? "PEN",
-    opening_balance: account.opening_balance ?? 0,
-    owner: account.owner ?? "",
-    branch: account.branch ?? "",
-    notes: account.notes ?? "",
+    currency: account.currency ?? "COP",
+    status: account.status ?? "active",
+    description: account.description ?? "",
   };
 }
 
 function buildAccountPayload(values) {
   return {
     name: values.name.trim(),
+    code: values.code.trim().toUpperCase(),
     type: values.type,
     currency: values.currency,
-    opening_balance: Number(values.opening_balance),
-    owner: values.owner.trim(),
-    branch: values.branch.trim(),
-    notes: values.notes.trim(),
+    status: values.status,
+    description: values.description.trim(),
   };
 }
 
@@ -203,7 +201,7 @@ export default function FinanceAccountDetailView({ accountId }) {
       <PageHeader
         eyebrow="Cuenta financiera"
         title={account.name}
-        description={`${account.branch ?? "Sin sucursal"} · ${account.owner ?? "Sin responsable"}`}
+        description={`${account.code ?? "Sin código"} · ${account.description ?? "Sin descripción"}`}
         actions={
           <>
             <Button variant="outline" onClick={() => router.push("/financials")}>
@@ -327,13 +325,6 @@ export default function FinanceAccountDetailView({ accountId }) {
                   </div>
 
                   <div className="flex items-center justify-between gap-4 py-3.5">
-                    <dt className="text-[12.5px] text-[#64748B]">Saldo inicial</dt>
-                    <dd className="text-[12.5px] tabular-nums text-[#475569]">
-                      {formatMoney(account.opening_balance, account.currency)}
-                    </dd>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 py-3.5">
                     <dt className="text-[12.5px] text-[#64748B]">Total ingresos</dt>
                     <dd className="text-[13px] font-semibold tabular-nums text-[#0A6B3D]">
                       {formatMoney(accountStats.income, account.currency)}
@@ -378,19 +369,19 @@ export default function FinanceAccountDetailView({ accountId }) {
 
                   <div>
                     <dt className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
-                      Responsable
+                      Código
                     </dt>
-                    <dd className="mt-1 text-[13px] text-[#334155]">
-                      {account.owner || "Sin responsable"}
+                    <dd className="mt-1 text-[13px] font-medium text-[#334155]">
+                      {account.code || "—"}
                     </dd>
                   </div>
 
                   <div>
                     <dt className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
-                      Sucursal
+                      Descripción
                     </dt>
                     <dd className="mt-1 text-[13px] leading-5 text-[#334155]">
-                      {account.branch || "Sin sucursal"}
+                      {account.description || "Sin descripción"}
                     </dd>
                   </div>
 
@@ -403,14 +394,6 @@ export default function FinanceAccountDetailView({ accountId }) {
                     </dd>
                   </div>
 
-                  <div className="border-t border-[#F1F4F9] pt-4">
-                    <dt className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
-                      Notas
-                    </dt>
-                    <dd className="mt-1 whitespace-pre-line text-[13px] leading-5 text-[#475569]">
-                      {account.notes || "Sin notas registradas."}
-                    </dd>
-                  </div>
                 </dl>
               </CardBody>
             </Card>

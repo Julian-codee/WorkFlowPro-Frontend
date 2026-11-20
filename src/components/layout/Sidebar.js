@@ -2,13 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListTodo, Settings2, Sparkles, Users, DollarSign, FileSpreadsheet } from "lucide-react";
+import {
+  CircleDollarSign,
+  DollarSign,
+  FileSpreadsheet,
+  LayoutDashboard,
+  ListTodo,
+  Settings2,
+  Sparkles,
+  Users,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils/cn";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tasks", label: "Tareas", icon: ListTodo },
+  { href: "/tasks/pending-payments", label: "Pagos pendientes", icon: CircleDollarSign },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/quotations", label: "Cotizaciones", icon: FileSpreadsheet },
   { href: "/financials", label: "Finanzas", icon: DollarSign},
@@ -17,6 +27,10 @@ const NAV_ITEMS = [
 
 function isActive(pathname, href) {
   if (href === "/dashboard") return pathname === href;
+  if (href === "/tasks") {
+    return pathname === href || (pathname.startsWith(`${href}/`) && pathname !== "/tasks/pending-payments");
+  }
+  if (href === "/tasks/pending-payments") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

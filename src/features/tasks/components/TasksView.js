@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ListTodo, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListTodo, Plus, WalletCards } from "lucide-react";
 
 import { Alert, Button, Card, CardBody, EmptyState, PageHeader } from "@/components/ui";
 import { TaskFilters, TaskList } from "@/features/tasks/components";
@@ -34,10 +34,16 @@ export default function TasksView() {
         title="Tareas"
         description="Todas las tareas del espacio de trabajo: revisa estados, prioridades y vencimientos."
         actions={
-          <Button variant="brand" onClick={() => router.push("/tasks/new")}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Nueva tarea
-          </Button>
+          <>
+            <Button variant="outline" href="/tasks/pending-payments">
+              <WalletCards className="h-4 w-4" aria-hidden="true" />
+              Pagos pendientes
+            </Button>
+            <Button variant="brand" onClick={() => router.push("/tasks/new")}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Nueva tarea
+            </Button>
+          </>
         }
       />
 

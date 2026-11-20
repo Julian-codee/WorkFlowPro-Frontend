@@ -2,19 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { listTasks } from "../services/taskService";
 
-/**
- * Carga y filtra el listado de tareas.
- *
- * Ya consume `listTasks` (servicio preparado para `GET /tasks/`).
- * Los filtros se aplican en el servidor cuando conectes el endpoint.
- */
+/** Carga el listado real de tareas con filtros, búsqueda, orden y paginación. */
 export function useTasks(initialFilters = {}) {
   const [filters, setFilters] = useState({
     status: "",
     priority: "",
     search: "",
+    sortBy: "created_at",
+    sortOrder: "desc",
     page: 1,
     pageSize: 8,
     ...initialFilters,
@@ -29,7 +28,6 @@ export function useTasks(initialFilters = {}) {
     error: null,
   });
 
-  // Clave que identifica la consulta actual (evita estados obsoletos).
   const queryKey = useMemo(() => JSON.stringify(filters), [filters]);
 
   useEffect(() => {
@@ -70,7 +68,6 @@ export function useTasks(initialFilters = {}) {
     setFilters((current) => ({
       ...current,
       ...patch,
-      // Cualquier cambio de filtro vuelve a la primera página.
       page: patch.page ?? 1,
     }));
   }, []);
@@ -80,6 +77,8 @@ export function useTasks(initialFilters = {}) {
       status: "",
       priority: "",
       search: "",
+      sortBy: "created_at",
+      sortOrder: "desc",
       page: 1,
       pageSize: 8,
     });
@@ -93,7 +92,8 @@ export function useTasks(initialFilters = {}) {
     setFilters((current) => ({ ...current, page }));
   }, []);
 
-  // Mientras la respuesta no corresponde a la consulta actual, seguimos cargando.
+  useDataInvalidation("tasks", refresh);
+
   const isCurrentQuery = state.key === queryKey;
   const status = isCurrentQuery ? state.status : "loading";
   const items = isCurrentQuery ? state.items : [];

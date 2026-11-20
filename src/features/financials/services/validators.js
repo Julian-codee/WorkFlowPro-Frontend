@@ -88,10 +88,11 @@ export function hasMovementErrors(errors = {}) {
 export function validateAccountForm(values = {}) {
   return {
     name: validateRequired(values.name, "El nombre de la cuenta es obligatorio."),
+    code: validateRequired(values.code, "El código de la cuenta es obligatorio."),
     type: validateRequired(values.type, "Selecciona el tipo de cuenta."),
     currency: validateRequired(values.currency, "Selecciona la moneda."),
-    opening_balance: validateAmount(values.opening_balance ?? 0, "El saldo inicial no puede ser negativo."),
-    notes: validateNotes(values.notes),
+    status: validateRequired(values.status, "Selecciona el estado de la cuenta."),
+    description: validateNotes(values.description),
   };
 }
 

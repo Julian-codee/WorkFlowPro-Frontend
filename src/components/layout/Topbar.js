@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils/cn";
 const MOBILE_NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/tasks", label: "Tareas" },
+  { href: "/tasks/pending-payments", label: "Pagos pendientes" },
   { href: "/customers", label: "Clientes" },
   { href: "/quotations", label: "Cotizaciones" },
   { href: "/financials", label: "Finanzas" },
@@ -22,6 +23,7 @@ const SECTION_TITLES = {
   "/dashboard": "Dashboard",
   "/tasks": "Tareas",
   "/tasks/new": "Nueva tarea",
+  "/tasks/pending-payments": "Pagos pendientes",
   "/customers": "Clientes",
   "/customers/new": "Nuevo cliente",
   "/quotations": "Cotizaciones",

@@ -39,7 +39,6 @@ export {
   listClosures,
   listMovements,
   listPeriods,
-  resetMockFinancials,
   resolveAdjustment,
   updateAccount,
   updateClosure,

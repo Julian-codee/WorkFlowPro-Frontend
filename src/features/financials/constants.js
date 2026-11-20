@@ -6,7 +6,7 @@
  */
 
 /** Moneda de referencia del módulo. */
-export const FINANCIAL_CURRENCY = "PEN";
+export const FINANCIAL_CURRENCY = "COP";
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Cuentas financieras
@@ -60,11 +60,13 @@ export const ACCOUNT_STATUS_OPTIONS = ACCOUNT_STATUS_LIST.map((item) => ({
 export const MOVEMENT_TYPES = {
   INCOME: "income",
   EXPENSE: "expense",
+  TRANSFER: "transfer",
 };
 
 export const MOVEMENT_TYPE_LIST = [
   { value: MOVEMENT_TYPES.INCOME, label: "Ingreso", shortLabel: "Ingreso", tone: "success" },
   { value: MOVEMENT_TYPES.EXPENSE, label: "Egreso", shortLabel: "Egreso", tone: "danger" },
+  { value: MOVEMENT_TYPES.TRANSFER, label: "Transferencia", shortLabel: "Transferencia", tone: "info" },
 ];
 
 export const MOVEMENT_TYPE_OPTIONS = MOVEMENT_TYPE_LIST.map((item) => ({
@@ -73,31 +75,34 @@ export const MOVEMENT_TYPE_OPTIONS = MOVEMENT_TYPE_LIST.map((item) => ({
 }));
 
 export const INCOME_CATEGORIES = [
-  { value: "sale", label: "Venta de servicios" },
-  { value: "subscription", label: "Suscripción mensual" },
-  { value: "maintenance", label: "Mantenimiento" },
-  { value: "training", label: "Capacitación" },
+  { value: "sales", label: "Ventas" },
+  { value: "services", label: "Servicios" },
+  { value: "products", label: "Productos" },
+  { value: "investments", label: "Inversiones" },
   { value: "other_income", label: "Otros ingresos" },
 ];
 
 export const EXPENSE_CATEGORIES = [
-  { value: "suppliers", label: "Proveedores" },
-  { value: "payroll", label: "Planilla" },
   { value: "rent", label: "Alquiler" },
   { value: "utilities", label: "Servicios básicos" },
-  { value: "taxes", label: "Impuestos" },
+  { value: "payroll", label: "Planilla" },
+  { value: "supplies", label: "Suministros" },
   { value: "marketing", label: "Marketing" },
-  { value: "software", label: "Software y licencias" },
+  { value: "transport", label: "Transporte" },
+  { value: "maintenance", label: "Mantenimiento" },
+  { value: "taxes", label: "Impuestos" },
+  { value: "loans", label: "Préstamos" },
   { value: "other_expense", label: "Otros gastos" },
 ];
 
 export const PAYMENT_METHODS = [
   { value: "cash", label: "Efectivo" },
-  { value: "transfer", label: "Transferencia" },
-  { value: "debit_card", label: "Tarjeta de débito" },
-  { value: "credit_card", label: "Tarjeta de crédito" },
-  { value: "digital_wallet", label: "Billetera digital" },
+  { value: "bank_transfer", label: "Transferencia bancaria" },
+  { value: "card", label: "Tarjeta" },
   { value: "check", label: "Cheque" },
+  { value: "digital_wallet", label: "Billetera digital" },
+  { value: "crypto", label: "Cripto" },
+  { value: "other", label: "Otro" },
 ];
 
 export const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((item) => ({
@@ -107,14 +112,12 @@ export const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((item) => ({
 
 export const MOVEMENT_STATUSES = {
   REGISTERED: "registered",
-  RECONCILED: "reconciled",
-  VOID: "void",
+  LATE: "late",
 };
 
 export const MOVEMENT_STATUS_LIST = [
   { value: MOVEMENT_STATUSES.REGISTERED, label: "Registrado", tone: "info" },
-  { value: MOVEMENT_STATUSES.RECONCILED, label: "Conciliado", tone: "success" },
-  { value: MOVEMENT_STATUSES.VOID, label: "Anulado", tone: "neutral" },
+  { value: MOVEMENT_STATUSES.LATE, label: "Registro tardío", tone: "warning" },
 ];
 
 export const MOVEMENT_STATUS_OPTIONS = MOVEMENT_STATUS_LIST.map((item) => ({
@@ -138,34 +141,44 @@ export function getCategoryLabel(category) {
 
 export const PERIOD_STATUSES = {
   OPEN: "open",
+  CLOSING: "closing",
   CLOSED: "closed",
+  ADJUSTED: "adjusted",
 };
 
 export const PERIOD_STATUS_LIST = [
   { value: PERIOD_STATUSES.OPEN, label: "Abierta", tone: "success" },
+  { value: PERIOD_STATUSES.CLOSING, label: "En cierre", tone: "warning" },
   { value: PERIOD_STATUSES.CLOSED, label: "Cerrada", tone: "neutral" },
+  { value: PERIOD_STATUSES.ADJUSTED, label: "Ajustada", tone: "info" },
 ];
 
 export const CLOSURE_STATUSES = {
-  DRAFT: "draft",
+  PENDING: "pending",
   CONFIRMED: "confirmed",
   ADJUSTED: "adjusted",
+  DISPUTED: "disputed",
 };
 
 export const CLOSURE_STATUS_LIST = [
-  { value: CLOSURE_STATUSES.DRAFT, label: "En revisión", tone: "warning" },
+  { value: CLOSURE_STATUSES.PENDING, label: "En revisión", tone: "warning" },
   { value: CLOSURE_STATUSES.CONFIRMED, label: "Confirmado", tone: "success" },
   { value: CLOSURE_STATUSES.ADJUSTED, label: "Ajustado", tone: "info" },
+  { value: CLOSURE_STATUSES.DISPUTED, label: "En disputa", tone: "danger" },
 ];
 
 export const ADJUSTMENT_TYPES = {
-  SHORTAGE: "shortage",
-  SURPLUS: "surplus",
+  LATE_INCOME: "late_income",
+  LATE_EXPENSE: "late_expense",
+  CORRECTION: "correction",
+  DISCREPANCY: "discrepancy",
 };
 
 export const ADJUSTMENT_TYPE_LIST = [
-  { value: ADJUSTMENT_TYPES.SHORTAGE, label: "Faltante", tone: "danger" },
-  { value: ADJUSTMENT_TYPES.SURPLUS, label: "Sobrante", tone: "success" },
+  { value: ADJUSTMENT_TYPES.LATE_INCOME, label: "Ingreso tardío", tone: "success" },
+  { value: ADJUSTMENT_TYPES.LATE_EXPENSE, label: "Egreso tardío", tone: "danger" },
+  { value: ADJUSTMENT_TYPES.CORRECTION, label: "Corrección", tone: "info" },
+  { value: ADJUSTMENT_TYPES.DISCREPANCY, label: "Diferencia de caja", tone: "warning" },
 ];
 
 export const ADJUSTMENT_STATUSES = {
@@ -398,7 +411,7 @@ export function summarizeMovements(movements = []) {
     const amount = Number(movement.amount ?? 0);
 
     if (movement.type === MOVEMENT_TYPES.INCOME) income += amount;
-    else expense += amount;
+    else if (movement.type === MOVEMENT_TYPES.EXPENSE) expense += amount;
   }
 
   return {
@@ -423,7 +436,9 @@ export function calculateWeekAccumulator(movements = []) {
 
 /** Signo visual de un importe según el tipo de movimiento. */
 export function getMovementSign(type) {
-  return type === MOVEMENT_TYPES.INCOME ? "+" : "−";
+  if (type === MOVEMENT_TYPES.INCOME) return "+";
+  if (type === MOVEMENT_TYPES.TRANSFER) return "↔";
+  return "−";
 }
 
 function round(value) {
