@@ -3,7 +3,7 @@
 // URL interna del backend de FastAPI. El proxy de desarrollo permite llamar a
 // la API desde el navegador sin depender de la configuración CORS del backend.
 const backendInternalUrl =
-  process.env.BACKEND_INTERNAL_URL?.trim() || "http://localhost:8000/api/v1";
+  process.env.BACKEND_INTERNAL_URL?.trim() || "http://127.0.0.1:8000/api/v1";
 
 const nextConfig = {
   /* config options here */

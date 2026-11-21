@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { listMovements } from "../services/financialService";
 
 /**
@@ -15,7 +18,7 @@ export function useFinancialMovements(initialFilters = {}) {
     accountId: "",
     category: "",
     paymentMethod: "",
-    status: "",
+    isLateEntry: "",
     from: "",
     to: "",
     minAmount: "",
@@ -85,7 +88,7 @@ export function useFinancialMovements(initialFilters = {}) {
       accountId: "",
       category: "",
       paymentMethod: "",
-      status: "",
+      isLateEntry: "",
       from: "",
       to: "",
       minAmount: "",
@@ -99,6 +102,8 @@ export function useFinancialMovements(initialFilters = {}) {
   const refresh = useCallback(() => {
     setFilters((current) => ({ ...current }));
   }, []);
+
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, refresh);
 
   const setPage = useCallback((page) => {
     setFilters((current) => ({ ...current, page }));

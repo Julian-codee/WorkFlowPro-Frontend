@@ -4,11 +4,10 @@
 
 import {
   ADJUSTMENT_STATUSES,
-  MOVEMENT_STATUSES,
   MOVEMENT_TYPES,
   PERIOD_STATUSES,
+  parseISODate,
 } from "../constants";
-import { getWeekRange, parseISODate } from "../constants";
 
 export function validateRequired(value, message) {
   return value === undefined || value === null || String(value).trim() === ""
@@ -19,7 +18,9 @@ export function validateRequired(value, message) {
 export function validateConcept(value) {
   if (!value || !String(value).trim()) return "El concepto es obligatorio.";
 
-  if (String(value).trim().length > 160) return "El concepto no puede superar 160 caracteres.";
+  if (String(value).trim().length > 255) {
+    return "El concepto no puede superar 255 caracteres.";
+  }
 
   return null;
 }
@@ -29,6 +30,15 @@ export function validateAmount(value) {
 
   if (!Number.isFinite(amount)) return "El importe debe ser un número válido.";
   if (amount <= 0) return "El importe debe ser mayor que 0.";
+
+  return null;
+}
+
+export function validateNonNegativeAmount(value, message = "El importe no puede ser negativo.") {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) return "El importe debe ser un número válido.";
+  if (amount < 0) return message;
 
   return null;
 }
@@ -60,12 +70,33 @@ export function validateNotes(value) {
 }
 
 /**
+ * FastAPI considera tardío un movimiento con fecha de al menos dos días
+ * anterior al día UTC actual. El día anterior todavía se acepta sin motivo.
+ */
+export function isLateMovement(movementDate, referenceDate = new Date()) {
+  if (!movementDate) return false;
+
+  const movement = new Date(`${String(movementDate).slice(0, 10)}T00:00:00Z`);
+  const reference = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
+
+  if (Number.isNaN(movement.getTime()) || Number.isNaN(reference.getTime())) return false;
+
+  const yesterdayUtc = Date.UTC(
+    reference.getUTCFullYear(),
+    reference.getUTCMonth(),
+    reference.getUTCDate() - 1,
+  );
+
+  return movement.getTime() < yesterdayUtc;
+}
+
+/**
  * Valida el formulario completo de un movimiento.
  *
  * @param {{ type?: string }} values
  */
 export function validateMovementForm(values = {}) {
-  return {
+  const errors = {
     type: validateRequired(values.type, "Selecciona el tipo de movimiento."),
     concept: validateConcept(values.concept),
     amount: validateAmount(values.amount),
@@ -73,8 +104,21 @@ export function validateMovementForm(values = {}) {
     category: validateCategory(values.category),
     payment_method: validateRequired(values.payment_method, "Selecciona el método de pago."),
     movement_date: validateMovementDate(values.movement_date),
-    notes: validateNotes(values.notes),
+    description: validateNotes(values.description),
+    reference:
+      values.reference && String(values.reference).length > 255
+        ? "La referencia no puede superar 255 caracteres."
+        : null,
   };
+
+  if (isLateMovement(values.movement_date)) {
+    errors.late_entry_reason = validateRequired(
+      values.late_entry_reason,
+      "Justifica por qué se registra el movimiento con esta fecha.",
+    );
+  }
+
+  return errors;
 }
 
 export function hasMovementErrors(errors = {}) {
@@ -86,7 +130,7 @@ export function hasMovementErrors(errors = {}) {
  * ────────────────────────────────────────────────────────────────────────── */
 
 export function validateAccountForm(values = {}) {
-  return {
+  const errors = {
     name: validateRequired(values.name, "El nombre de la cuenta es obligatorio."),
     code: validateRequired(values.code, "El código de la cuenta es obligatorio."),
     type: validateRequired(values.type, "Selecciona el tipo de cuenta."),
@@ -94,6 +138,12 @@ export function validateAccountForm(values = {}) {
     status: validateRequired(values.status, "Selecciona el estado de la cuenta."),
     description: validateNotes(values.description),
   };
+
+  if (values.code && String(values.code).length > 20) {
+    errors.code = "El código no puede superar 20 caracteres.";
+  }
+
+  return errors;
 }
 
 export function hasAccountErrors(errors = {}) {
@@ -105,17 +155,16 @@ export function hasAccountErrors(errors = {}) {
  * ────────────────────────────────────────────────────────────────────────── */
 
 export function validateClosureForm(values = {}) {
-  const errors = {
-    expected_cash: validateAmount(values.expected_cash ?? 0, "El saldo esperado debe ser mayor que 0."),
-    actual_cash: validateAmount(values.actual_cash ?? 0, "El saldo real debe ser mayor que 0."),
-    notes: validateNotes(values.notes),
+  return {
+    expected_balance: Number.isFinite(Number(values.expected_balance))
+      ? null
+      : "El saldo esperado debe ser un número válido.",
+    physical_balance: validateNonNegativeAmount(
+      values.physical_balance,
+      "El saldo real no puede ser negativo.",
+    ),
+    observations: validateNotes(values.observations),
   };
-
-  if (values.responsible) {
-    errors.responsible = validateRequired(values.responsible, "Indica el responsable del cierre.");
-  }
-
-  return errors;
 }
 
 export function hasClosureErrors(errors = {}) {
@@ -123,14 +172,16 @@ export function hasClosureErrors(errors = {}) {
 }
 
 export function validateAdjustmentForm(values = {}) {
+  const impact = Number(values.impact_on_balance);
+
   return {
-    type: validateRequired(values.type, "Selecciona el tipo de diferencia."),
-    amount: validateAmount(values.amount, "El importe de la diferencia debe ser mayor que 0."),
-    reason: validateRequired(values.reason, "Describe la causa de la diferencia."),
-    justification: validateRequired(
-      values.justification,
-      "Registra la justificación del ajuste.",
-    ),
+    type: validateRequired(values.type, "Selecciona el tipo de ajuste."),
+    movement_id: validateRequired(values.movement_id, "Selecciona el movimiento asociado."),
+    amount: validateAmount(values.amount, "El importe del ajuste debe ser mayor que 0."),
+    impact_on_balance: Number.isFinite(impact)
+      ? null
+      : "El impacto en saldo debe ser un número válido.",
+    reason: validateRequired(values.reason, "Describe la causa del ajuste."),
   };
 }
 
@@ -139,48 +190,22 @@ export function hasAdjustmentErrors(errors = {}) {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Restricciones sobre períodos cerrados
+ * Restricciones sobre períodos y movimientos
  * ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * Indica si un movimiento puede registrarse o editarse sobre un período.
- * Los períodos cerrados solo admiten movimientos tardíos con justificación.
- */
+/** Indica si un movimiento puede registrarse o editarse sobre un período. */
 export function canModifyPeriod(period) {
   if (!period) return true;
 
   return period.status !== PERIOD_STATUSES.CLOSED;
 }
 
-/** Un movimiento es "tardío" si su fecha es anterior a la semana en curso. */
-export function isLateMovement(movementDate, referenceDate = new Date()) {
-  const movement = parseISODate(movementDate);
-  const reference = parseISODate(referenceDate);
-
-  if (!movement || !reference) return false;
-
-  const movementWeek = getWeekRange(movement);
-  const referenceWeek = getWeekRange(reference);
-
-  if (!movementWeek || !referenceWeek) return false;
-
-  return movementWeek.key < referenceWeek.key;
-}
-
-/** Un movimiento no se puede eliminar si ya fue conciliado. */
+/** Los movimientos vinculados a una tarea no se pueden eliminar desde Finanzas. */
 export function canDeleteMovement(movement) {
   if (!movement) return false;
 
-  return movement.status !== MOVEMENT_STATUSES.RECONCILED;
+  return !movement.task_id;
 }
 
-/** Un movimiento no se puede anular si pertenece a un período confirmado. */
-export function canVoidMovement(movement) {
-  if (!movement) return false;
-
-  return movement.status === MOVEMENT_STATUSES.REGISTERED;
-}
-
-export const MOVEMENT_STATUS_VALUES = Object.values(MOVEMENT_STATUSES);
 export const ADJUSTMENT_STATUS_VALUES = Object.values(ADJUSTMENT_STATUSES);
 export const MOVEMENT_TYPE_VALUES = Object.values(MOVEMENT_TYPES);

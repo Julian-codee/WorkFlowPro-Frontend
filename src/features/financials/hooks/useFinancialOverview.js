@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { getFinancialOverview } from "../services/financialService";
 
 /**
@@ -46,6 +49,8 @@ export function useFinancialOverview() {
   const reload = useCallback(() => {
     setReloadToken((current) => current + 1);
   }, []);
+
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, reload);
 
   const isCurrent = state.key === reloadToken;
 

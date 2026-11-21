@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { getFinancialCalendar } from "../services/financialService";
 
 /**
@@ -49,6 +52,8 @@ export function useFinancialCalendar(year, month) {
   const reload = useCallback(() => {
     setReloadToken((current) => current + 1);
   }, []);
+
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, reload);
 
   return {
     calendar: isCurrent ? state.calendar : null,

@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { getClosure } from "../services/financialService";
 
 /**
@@ -50,8 +53,11 @@ export function useFinancialClosure(id) {
     setReloadToken((current) => current + 1);
   }, []);
 
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, reload);
+
   return {
     closure: isCurrent ? state.closure : null,
+    movements: isCurrent ? state.closure?.movements ?? [] : [],
     status: isCurrent ? state.status : "loading",
     error: isCurrent ? state.error : null,
     isLoading: !isCurrent || state.status === "loading",

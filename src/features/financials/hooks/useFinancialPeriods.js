@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { listPeriods } from "../services/financialService";
 
 /**
@@ -13,6 +16,7 @@ export function useFinancialPeriods(initialFilters = {}) {
   const [filters, setFilters] = useState({
     status: "",
     year: "",
+    cashAccountId: "",
     search: "",
     ...initialFilters,
   });
@@ -67,12 +71,14 @@ export function useFinancialPeriods(initialFilters = {}) {
   }, []);
 
   const resetFilters = useCallback(() => {
-    setFilters({ status: "", year: "", search: "" });
+    setFilters({ status: "", year: "", cashAccountId: "", search: "" });
   }, []);
 
   const refresh = useCallback(() => {
     setFilters((current) => ({ ...current }));
   }, []);
+
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, refresh);
 
   const isCurrent = state.key === queryKey;
 

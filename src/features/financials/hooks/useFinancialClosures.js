@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { getClosuresHistory } from "../services/financialService";
 
 /**
@@ -12,6 +15,7 @@ import { getClosuresHistory } from "../services/financialService";
 export function useFinancialClosures(initialFilters = {}) {
   const [filters, setFilters] = useState({
     status: "",
+    cashAccountId: "",
     from: "",
     to: "",
     search: "",
@@ -68,12 +72,14 @@ export function useFinancialClosures(initialFilters = {}) {
   }, []);
 
   const resetFilters = useCallback(() => {
-    setFilters({ status: "", from: "", to: "", search: "" });
+    setFilters({ status: "", cashAccountId: "", from: "", to: "", search: "" });
   }, []);
 
   const refresh = useCallback(() => {
     setFilters((current) => ({ ...current }));
   }, []);
+
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, refresh);
 
   const isCurrent = state.key === queryKey;
 
@@ -83,9 +89,8 @@ export function useFinancialClosures(initialFilters = {}) {
     () => ({
       total: items.length,
       withDifference: items.filter((closure) => Math.abs(closure.difference ?? 0) > 0).length,
-      pendingAdjustments: items.reduce(
-        (acc, closure) =>
-          acc + closure.adjustments.filter((adjustment) => adjustment.status === "pending").length,
+      adjustments: items.reduce(
+        (acc, closure) => acc + Number(closure.adjustment_count ?? 0),
         0,
       ),
     }),

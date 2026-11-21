@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { listAccounts } from "../services/financialService";
 
 /**
@@ -73,6 +76,8 @@ export function useFinancialAccounts(initialFilters = {}) {
   const refresh = useCallback(() => {
     setFilters((current) => ({ ...current }));
   }, []);
+
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, refresh);
 
   const isCurrent = state.key === queryKey;
 

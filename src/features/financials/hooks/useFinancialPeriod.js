@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { DATA_DOMAINS } from "@/lib/data/invalidation";
+import { useDataInvalidation } from "@/lib/data/useDataInvalidation";
+
 import { getPeriodSummary } from "../services/financialService";
 
 /**
@@ -50,9 +53,12 @@ export function useFinancialPeriod(id) {
     setReloadToken((current) => current + 1);
   }, []);
 
+  useDataInvalidation(DATA_DOMAINS.FINANCIALS, reload);
+
   return {
     period: isCurrent ? state.summary?.period : null,
     totals: isCurrent ? state.summary?.totals : null,
+    closureTotals: isCurrent ? state.summary?.closure_totals : null,
     movements: isCurrent ? state.summary?.movements ?? [] : [],
     closure: isCurrent ? state.summary?.closure ?? null : null,
     status: isCurrent ? state.status : "loading",

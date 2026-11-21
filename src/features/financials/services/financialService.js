@@ -62,6 +62,22 @@ function dateOnly(value) {
   return value ? String(value).slice(0, 10) : "";
 }
 
+function isWithinRange(value, start, end) {
+  if (!value || !start || !end) return false;
+
+  const timestamp = new Date(value).getTime();
+  const startTimestamp = new Date(start).getTime();
+  const endTimestamp = new Date(end).getTime();
+
+  return (
+    Number.isFinite(timestamp) &&
+    Number.isFinite(startTimestamp) &&
+    Number.isFinite(endTimestamp) &&
+    timestamp >= startTimestamp &&
+    timestamp <= endTimestamp
+  );
+}
+
 function toApiDate(value, endOfDay = false) {
   if (!value) return undefined;
 
@@ -374,7 +390,7 @@ async function fetchAllMovements(params = {}) {
     to = "",
     minAmount = null,
     maxAmount = null,
-    isLateEntry = null,
+    isLateEntry = "",
     sortBy = "transaction_date",
     sortOrder = "desc",
   } = params;
@@ -389,7 +405,8 @@ async function fetchAllMovements(params = {}) {
     transaction_to: to ? toApiDate(to, true) : undefined,
     min_amount: minAmount === null || minAmount === undefined || minAmount === "" ? undefined : minAmount,
     max_amount: maxAmount === null || maxAmount === undefined || maxAmount === "" ? undefined : maxAmount,
-    is_late_entry: isLateEntry === null || isLateEntry === undefined ? undefined : isLateEntry,
+    is_late_entry:
+      isLateEntry === "late" ? true : isLateEntry === "regular" ? false : undefined,
     sort_by: sortBy,
     sort_order: sortOrder,
   });
@@ -428,7 +445,8 @@ export async function getMovement(id) {
 
 /** Crea un movimiento con el contrato real del backend. */
 export async function createMovement(payload) {
-  const notes = payload.notes?.trim() || payload.description?.trim() || null;
+  const description = payload.description?.trim() || payload.notes?.trim() || null;
+  const lateEntryReason = payload.late_entry_reason?.trim() || null;
   const movement = await post("/financial/movements", {
     transaction_date: payload.movement_date ?? payload.transaction_date,
     movement_type: payload.type ?? payload.movement_type,
@@ -437,38 +455,13 @@ export async function createMovement(payload) {
     payment_method: payload.payment_method,
     cash_account_id: payload.account_id ?? payload.cash_account_id,
     concept: payload.concept?.trim(),
-    description: notes,
+    description,
     reference: payload.reference?.trim() || null,
     customer_id: payload.customer_id ?? null,
     task_id: payload.task_id ?? null,
     quotation_id: payload.quotation_id ?? null,
-    is_late_entry: Boolean(payload.is_late_entry),
-    late_entry_reason: notes,
-  });
-
-  invalidateData(DATA_DOMAINS.FINANCIALS);
-  return normalizeMovement(movement);
-}
-
-/**
- * Actualiza un movimiento. FastAPI no admite cambios de referencia y el
- * movimiento se vincula a los campos reales del recurso.
- */
-export async function updateMovement(id, payload) {
-  const movement = await patch(`/financial/movements/${id}`, {
-    transaction_date: payload.movement_date ?? undefined,
-    movement_type: payload.type ?? undefined,
-    category: payload.category ?? undefined,
-    amount: payload.amount === undefined ? undefined : Number(payload.amount),
-    payment_method: payload.payment_method ?? undefined,
-    cash_account_id: payload.account_id ?? undefined,
-    concept: payload.concept?.trim() || undefined,
-    description: payload.notes?.trim() || undefined,
-    customer_id: payload.customer_id ?? undefined,
-    task_id: payload.task_id ?? undefined,
-    quotation_id: payload.quotation_id ?? undefined,
-    is_late_entry: payload.is_late_entry ?? undefined,
-    late_entry_reason: payload.notes?.trim() || payload.late_entry_reason || undefined,
+    is_late_entry: Boolean(payload.is_late_entry || lateEntryReason),
+    late_entry_reason: lateEntryReason,
   });
 
   invalidateData(DATA_DOMAINS.FINANCIALS);
@@ -477,6 +470,14 @@ export async function updateMovement(id, payload) {
 
 /** Elimina un movimiento no vinculado a una tarea. */
 export async function deleteMovement(id) {
+  const movement = normalizeMovement(await get(`/financial/movements/${id}`));
+
+  if (movement.task_id) {
+    throw new Error(
+      "Los movimientos vinculados a una tarea no se pueden eliminar desde Finanzas porque forman parte de su deuda.",
+    );
+  }
+
   const result = await del(`/financial/movements/${id}`);
 
   invalidateData(DATA_DOMAINS.FINANCIALS);
@@ -579,7 +580,7 @@ export async function listPeriods(params = {}) {
   const allPeriods = await fetchAllPeriods({ status, year, cashAccountId });
   const normalizedSearch = search.trim().toLowerCase();
 
-  const items = allPeriods.filter((period) => {
+  const matchingPeriods = allPeriods.filter((period) => {
     if (!normalizedSearch) return true;
 
     const haystack = [
@@ -596,24 +597,44 @@ export async function listPeriods(params = {}) {
     return haystack.includes(normalizedSearch);
   });
 
-  const closures = await listClosures({ cashAccountId });
+  const [allMovements, closures] = await Promise.all([
+    fetchAllMovements({ accountId: cashAccountId }),
+    listClosures({ cashAccountId }),
+  ]);
   const closureByPeriod = new Map(closures.map((closure) => [closure.period_id, closure]));
 
-  const periods = items.map((period) => ({
-    ...period,
-    closure: closureByPeriod.get(period.id) ?? null,
-  }));
+  const periods = matchingPeriods.map((period) => {
+    const movements = allMovements.filter(
+      (movement) =>
+        movement.account_id === period.cash_account_id &&
+        isWithinRange(movement.movement_date, period.start_date, period.end_date),
+    );
+    const summary = summarizeMovements(movements);
+
+    return {
+      ...period,
+      income: summary.income,
+      expense: summary.expense,
+      balance: summary.balance,
+      cash_income: summary.income,
+      cash_expense: summary.expense,
+      cash_balance: summary.balance,
+      movement_count: movements.length,
+      closure: closureByPeriod.get(period.id) ?? null,
+    };
+  });
 
   return {
     items: periods,
     periods,
     total: periods.length,
     stats: {
-      total: allPeriods.length,
-      open: allPeriods.filter((period) => period.status === PERIOD_STATUSES.OPEN).length,
-      closed: allPeriods.filter((period) => period.status === PERIOD_STATUSES.CLOSED).length,
-      income: allPeriods.reduce((sum, period) => sum + period.income, 0),
-      expense: allPeriods.reduce((sum, period) => sum + period.expense, 0),
+      total: periods.length,
+      open: periods.filter((period) => period.status === PERIOD_STATUSES.OPEN).length,
+      closed: periods.filter((period) => period.status === PERIOD_STATUSES.CLOSED).length,
+      adjusted: periods.filter((period) => period.status === PERIOD_STATUSES.ADJUSTED).length,
+      income: periods.reduce((sum, period) => sum + period.income, 0),
+      expense: periods.reduce((sum, period) => sum + period.expense, 0),
     },
   };
 }
@@ -662,8 +683,8 @@ export async function getPeriod(id) {
   const [movements, closure] = await Promise.all([
     fetchAllMovements({
       accountId: period.cash_account_id,
-      from: dateOnly(period.start_date),
-      to: dateOnly(period.end_date),
+      from: period.start_date,
+      to: period.end_date,
     }),
     getClosureByPeriod(period.id),
   ]);
@@ -703,11 +724,13 @@ export async function closePeriod(id) {
 export async function getPeriodSummary(id) {
   const response = await get(`/financial/periods/${id}/summary`);
   const period = normalizePeriod(response?.period);
-  const movements = await fetchAllMovements({
-    accountId: period.cash_account_id,
-    from: dateOnly(period.start_date),
-    to: dateOnly(period.end_date),
+  const allMovements = await fetchAllMovements({
+    from: period.start_date,
+    to: period.end_date,
   });
+  const movements = period.cash_account_id
+    ? allMovements.filter((movement) => movement.account_id === period.cash_account_id)
+    : allMovements;
 
   let closure = null;
   const rawClosure = response?.cash_closure;
@@ -723,18 +746,29 @@ export async function getPeriodSummary(id) {
   }
 
   const summary = summarizeMovements(movements);
+  const closureSummary = summarizeMovements(allMovements);
+  const openingBalance = Number(period.opening_balance ?? 0);
+  const netFlow = closureSummary.income - closureSummary.expense;
 
   return {
     period,
     totals: {
-      income: period.income,
-      expense: period.expense,
-      balance: period.balance,
+      income: summary.income,
+      expense: summary.expense,
+      balance: summary.balance,
       count: summary.count,
       cash_income: summary.income,
       cash_expense: summary.expense,
       cash_balance: summary.balance,
       cash_movements: movements.length,
+    },
+    closure_totals: {
+      total_income: closureSummary.income,
+      total_expense: closureSummary.expense,
+      net_flow: netFlow,
+      opening_balance: openingBalance,
+      expected_balance: openingBalance + netFlow,
+      movement_count: closureSummary.count,
     },
     movements,
     closure,
@@ -810,11 +844,11 @@ export async function listClosures(params = {}) {
     closures: items,
     total: items.length,
     stats: {
-      total: allClosures.length,
-      confirmed: allClosures.filter((closure) => closure.status === CLOSURE_STATUSES.CONFIRMED).length,
-      adjusted: allClosures.filter((closure) => closure.status === CLOSURE_STATUSES.ADJUSTED).length,
-      pending: allClosures.filter((closure) => closure.status === CLOSURE_STATUSES.PENDING).length,
-      pending_adjustments: allClosures.reduce(
+      total: items.length,
+      confirmed: items.filter((closure) => closure.status === CLOSURE_STATUSES.CONFIRMED).length,
+      adjusted: items.filter((closure) => closure.status === CLOSURE_STATUSES.ADJUSTED).length,
+      pending: items.filter((closure) => closure.status === CLOSURE_STATUSES.PENDING).length,
+      adjustments: items.reduce(
         (sum, closure) => sum + Number(closure.adjustment_count ?? 0),
         0,
       ),
@@ -851,15 +885,24 @@ export async function createClosure(payload) {
   return normalizeClosure(closure);
 }
 
-/** Obtiene un cierre con su período y ajustes. */
+/** Obtiene un cierre con su período, movimientos y ajustes. */
 export async function getClosure(id) {
   const rawClosure = await get(`/financial/closures/${id}`);
-  const period = await get(`/financial/periods/${rawClosure.weekly_period_id}`);
-  const adjustments = await listClosureAdjustments(id);
+  const rawPeriod = await get(`/financial/periods/${rawClosure.weekly_period_id}`);
+  const period = normalizePeriod(rawPeriod);
+  const [adjustments, movements] = await Promise.all([
+    listClosureAdjustments(id),
+    fetchAllMovements({
+      accountId: period.cash_account_id,
+      from: period.start_date,
+      to: period.end_date,
+    }),
+  ]);
 
   return {
-    ...normalizeClosure(rawClosure, period),
+    ...normalizeClosure(rawClosure, rawPeriod),
     adjustments: adjustments.items,
+    movements,
   };
 }
 
@@ -926,7 +969,7 @@ export async function createClosureAdjustment(closureId, payload) {
     adjustment_type: payload.adjustment_type ?? payload.type,
     amount: Number(payload.amount),
     impact_on_balance: Number(payload.impact_on_balance ?? 0),
-    reason: payload.reason?.trim(),
+    reason: payload.reason?.trim() ?? null,
     resolution: payload.resolution ?? null,
   });
 
@@ -936,7 +979,12 @@ export async function createClosureAdjustment(closureId, payload) {
 
 /** Resuelve un ajuste; `resolution` es un query param obligatorio. */
 export async function resolveAdjustment(adjustmentId, payload = {}) {
-  const resolution = payload.resolution ?? payload.justification;
+  const resolution = String(payload.resolution ?? payload.justification ?? "").trim();
+
+  if (!resolution) {
+    throw new Error("Ingresa la resolución del ajuste antes de guardarla.");
+  }
+
   const adjustment = await patch(`/financial/adjustments/${adjustmentId}`, {
     query: { resolution },
   });
@@ -965,37 +1013,43 @@ export async function getClosuresHistory(params = {}) {
 
 /** Compone el dashboard con cuentas, movimientos, períodos y cierres reales. */
 export async function getFinancialOverview() {
-  const [accountResult, movements, periodResult, closureResult] = await Promise.all([
+  const [accountResult, allMovements] = await Promise.all([
     listAccounts(),
     fetchAllMovements({ sortBy: "recorded_at", sortOrder: "desc" }),
-    listPeriods(),
-    listClosures(),
   ]);
 
   const accounts = accountResult.items;
   const activeAccounts = accounts.filter((account) => account.status === "active");
   const cashAccount = activeAccounts.find((account) => account.type === "cash") ?? activeAccounts[0];
-  const currentPeriod = cashAccount ? await getCurrentPeriod(cashAccount.id) : null;
+  const currency = cashAccount?.currency ?? activeAccounts[0]?.currency ?? "COP";
+  const cashAccountId = cashAccount?.id ?? "";
 
+  const [periodResult, closureResult, currentPeriod] = await Promise.all([
+    listPeriods({ cashAccountId }),
+    listClosures({ cashAccountId }),
+    cashAccountId ? getCurrentPeriod(cashAccountId) : Promise.resolve(null),
+  ]);
+
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+  const movements = allMovements.filter(
+    (movement) => accountById.get(movement.account_id)?.currency === currency,
+  );
   const now = new Date();
   const monthPrefix = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
   const monthMovements = movements.filter((movement) =>
     String(movement.movement_date ?? "").startsWith(monthPrefix),
   );
   const weekMovements = currentPeriod
-    ? movements.filter((movement) => {
-        const timestamp = new Date(movement.movement_date).getTime();
-        return (
-          timestamp >= new Date(currentPeriod.start_date).getTime() &&
-          timestamp <= new Date(currentPeriod.end_date).getTime()
-        );
-      })
+    ? movements.filter((movement) =>
+        isWithinRange(movement.movement_date, currentPeriod.start_date, currentPeriod.end_date),
+      )
     : [];
 
   const monthSummary = summarizeMovements(monthMovements);
   const weekSummary = summarizeMovements(weekMovements);
-  const totalBalance = activeAccounts.reduce((sum, account) => sum + account.balance, 0);
-  const cashBalance = activeAccounts
+  const currencyAccounts = activeAccounts.filter((account) => account.currency === currency);
+  const totalBalance = currencyAccounts.reduce((sum, account) => sum + account.balance, 0);
+  const cashBalance = currencyAccounts
     .filter((account) => account.type === "cash")
     .reduce((sum, account) => sum + account.balance, 0);
 
@@ -1026,7 +1080,7 @@ export async function getFinancialOverview() {
     }));
 
   return {
-    currency: activeAccounts[0]?.currency ?? "COP",
+    currency,
     totals: {
       income: movements
         .filter((movement) => movement.type === MOVEMENT_TYPES.INCOME)

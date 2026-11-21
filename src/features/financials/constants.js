@@ -1,8 +1,7 @@
 /**
  * Catálogos, estados y helpers de cálculo del módulo de Finanzas.
  *
- * ⚠️ Los valores son una propuesta de UI: ajústalos al enum real del backend
- * (FastAPI) cuando conectes los endpoints de /financial.
+ * Los enums y la moneda predeterminada están alineados con FastAPI.
  */
 
 /** Moneda de referencia del módulo. */
@@ -127,7 +126,10 @@ export const MOVEMENT_STATUS_OPTIONS = MOVEMENT_STATUS_LIST.map((item) => ({
 
 /** Categorías según el tipo de movimiento. */
 export function getCategoriesForType(type) {
-  return type === MOVEMENT_TYPES.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  if (type === MOVEMENT_TYPES.INCOME) return INCOME_CATEGORIES;
+  if (type === MOVEMENT_TYPES.TRANSFER) return [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
+
+  return EXPENSE_CATEGORIES;
 }
 
 export function getCategoryLabel(category) {
@@ -406,7 +408,7 @@ export function summarizeMovements(movements = []) {
   let expense = 0;
 
   for (const movement of movements) {
-    if (!movement || movement.status === MOVEMENT_STATUSES.VOID) continue;
+    if (!movement) continue;
 
     const amount = Number(movement.amount ?? 0);
 
