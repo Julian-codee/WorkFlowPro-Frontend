@@ -468,6 +468,45 @@ export async function createMovement(payload) {
   return normalizeMovement(movement);
 }
 
+/** Actualiza un movimiento financiero existente. */
+export async function updateMovement(id, payload) {
+  const description = payload.description?.trim() || payload.notes?.trim() || null;
+  const lateEntryReason = payload.late_entry_reason?.trim() || null;
+  const body = {};
+
+  if (payload.movement_date !== undefined || payload.transaction_date !== undefined) {
+    body.transaction_date = payload.movement_date ?? payload.transaction_date;
+  }
+  if (payload.type !== undefined || payload.movement_type !== undefined) {
+    body.movement_type = payload.type ?? payload.movement_type;
+  }
+  if (payload.category !== undefined) body.category = payload.category;
+  if (payload.amount !== undefined) body.amount = Number(payload.amount);
+  if (payload.payment_method !== undefined) body.payment_method = payload.payment_method;
+  if (payload.account_id !== undefined || payload.cash_account_id !== undefined) {
+    body.cash_account_id = payload.account_id ?? payload.cash_account_id;
+  }
+  if (payload.concept !== undefined) body.concept = payload.concept?.trim();
+  if (payload.description !== undefined || payload.notes !== undefined) {
+    body.description = description;
+  }
+  if (payload.reference !== undefined) body.reference = payload.reference?.trim() || null;
+  if (payload.customer_id !== undefined) body.customer_id = payload.customer_id ?? null;
+  if (payload.task_id !== undefined) body.task_id = payload.task_id ?? null;
+  if (payload.quotation_id !== undefined) body.quotation_id = payload.quotation_id ?? null;
+  if (payload.is_late_entry !== undefined || lateEntryReason !== null) {
+    body.is_late_entry = Boolean(payload.is_late_entry || lateEntryReason);
+  }
+  if (payload.late_entry_reason !== undefined || lateEntryReason !== null) {
+    body.late_entry_reason = lateEntryReason;
+  }
+
+  const movement = await patch(`/financial/movements/${id}`, body);
+
+  invalidateData(DATA_DOMAINS.FINANCIALS);
+  return normalizeMovement(movement);
+}
+
 /** Elimina un movimiento no vinculado a una tarea. */
 export async function deleteMovement(id) {
   const movement = normalizeMovement(await get(`/financial/movements/${id}`));

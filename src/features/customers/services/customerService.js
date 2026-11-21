@@ -1,14 +1,9 @@
 /**
  * Servicio de clientes de WorkFlowPro.
  *
- * ═══════════════════════════════════════════════════════════════════════════
- * ⚠️  MODO MOCK: todavía NO se consumen los endpoints del backend.
+ * Conectado al backend de FastAPI (prefijo /api/v1).
  *
- * Todas las funciones tienen marcada la petición real que te faltará por
- * implementar. Para activar la integración basta con sustituir el cuerpo
- * `mock*` por la llamada marcada en cada función.
- *
- * Contrato del backend (FastAPI, prefijo /api/v1):
+ * Contrato del backend:
  *   POST   /customers/                    → crear (natural o legal)
  *   POST   /customers/natural             → crear persona natural
  *   POST   /customers/legal               → crear persona jurídica
@@ -30,34 +25,13 @@
  * Todas las rutas (salvo login/register) requieren
  * `Authorization: Bearer <access_token>`: el cliente HTTP de `src/lib/api`
  * ya lo añade automáticamente.
- * ═══════════════════════════════════════════════════════════════════════════
  */
 
 import { del, get, patch, post } from "@/lib/api";
 
 import { CUSTOMER_STATUSES, getCustomerDisplayName } from "../constants";
-import { MOCK_AUDIT, MOCK_CUSTOMERS, MOCK_FINANCIAL, MOCK_NOTES, MOCK_STATS } from "./mockData";
 
-/** Latencia simulada para que los estados de carga sean visibles. */
-function mockDelay(ms = 450) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Copia en memoria del store ficticio (permite crear/editar/archivar en la demo). */
-let mockStore = MOCK_CUSTOMERS.map((customer) => ({ ...customer }));
-let mockNotes = Object.fromEntries(
-  Object.entries(MOCK_NOTES).map(([customerId, notes]) => [
-    customerId,
-    notes.map((note) => ({ ...note })),
-  ]),
-);
-let mockAudit = Object.fromEntries(
-  Object.entries(MOCK_AUDIT).map(([customerId, entries]) => [
-    customerId,
-    entries.map((entry) => ({ ...entry })),
-  ]),
-);
-
+/** Copia superficial de un cliente. */
 function clone(customer) {
   return { ...customer };
 }
@@ -69,17 +43,121 @@ function notFound(id) {
   return error;
 }
 
-function auditEntry(customerId, action, detail) {
-  const entries = mockAudit[customerId] ?? [];
-  const entry = {
-    id: `aud_${String(entries.length + 1).padStart(3, "0")}`,
-    action,
-    actor: "Ana Morales",
-    created_at: new Date().toISOString(),
-    detail,
+/* ──────────────────────────────────────────────────────────────────────────
+ * Mapeo de campos: frontend ↔ backend
+ *
+ * El formulario del frontend usa nombres de campo propios; el backend de
+ * FastAPI expone el esquema de CustomerNaturalCreate / CustomerLegalCreate.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Mapea los tipos de documento del frontend a los enum del backend.
+ *
+ * Frontend: dni, ce, passport, nit, ruc, other
+ * Backend:  cc, ce, passport, nit, nit_legal, rut
+ */
+function mapDocumentTypeToBackend(value, isLegal) {
+  const map = {
+    dni: isLegal ? "nit_legal" : "cc",
+    ce: isLegal ? "nit_legal" : "ce",
+    passport: "passport",
+    nit: "nit",
+    ruc: "nit_legal",
+    other: isLegal ? "nit_legal" : "cc",
+  };
+  return map[value] || (isLegal ? "nit_legal" : "cc");
+}
+
+/**
+ * Convierte la forma del frontend a la forma del backend para crear.
+ *
+ * @param {object} payload - datos del formulario frontend
+ * @returns {object} cuerpo listo para enviar a FastAPI
+ */
+function toBackendCreate(payload) {
+  const isLegal = payload.type === "legal";
+  const docType = mapDocumentTypeToBackend(payload.document_type, isLegal);
+
+  const common = {
+    customer_type: payload.type,
+    phone: payload.phone ?? "",
+    email: payload.email ?? undefined,
+    address: payload.address ?? undefined,
+    city: payload.city ?? undefined,
+    department: payload.state ?? undefined,
+    country: payload.country ?? undefined,
   };
 
-  mockAudit = { ...mockAudit, [customerId]: [entry, ...entries] };
+  if (isLegal) {
+    return {
+      ...common,
+      // Razón social → business_name; Nombre comercial → trade_name
+      business_name: payload.legal_name ?? "",
+      trade_name: payload.business_name ?? undefined,
+      tax_id_type: docType,
+      tax_id_number: payload.tax_id ?? payload.document_number ?? "",
+      legal_rep_name: payload.contact_name ?? undefined,
+      website: payload.website ?? undefined,
+      economic_activity: payload.industry ?? undefined,
+    };
+  }
+
+  return {
+    ...common,
+    first_name: payload.first_name ?? "",
+    last_name: payload.last_name ?? "",
+    identification_type: docType,
+    identification_number: payload.document_number ?? "",
+  };
+}
+
+/**
+ * Convierte la respuesta del backend a la forma interna del frontend.
+ *
+ * @param {object} customer - objeto devuelto por FastAPI
+ * @returns {object} cliente en forma de frontend
+ */
+function fromBackend(customer) {
+  if (!customer) return null;
+
+  const isLegal = customer.customer_type === "legal";
+
+  return {
+    ...customer,
+    id: customer.id,
+    type: customer.customer_type,
+    first_name: customer.first_name ?? null,
+    last_name: customer.last_name ?? null,
+    // Razón social → legal_name; Nombre comercial → business_name
+    business_name: customer.trade_name ?? null,
+    legal_name: customer.business_name ?? null,
+    tax_id: customer.tax_id_number ?? customer.identification_number ?? null,
+    document_type:
+      customer.tax_id_type ?? customer.identification_type ?? "other",
+    document_number:
+      customer.tax_id_number ?? customer.identification_number ?? "",
+    email: customer.email ?? "",
+    phone: customer.phone ?? "",
+    birth_date: null,
+    incorporation_date: null,
+    industry: customer.economic_activity ?? null,
+    website: customer.website ?? null,
+    address: customer.address ?? "",
+    city: customer.city ?? "",
+    state: customer.department ?? null,
+    country: customer.country ?? "",
+    contact_name: customer.main_contact_name ?? null,
+    contact_email: null,
+    contact_phone: null,
+    status: customer.status ?? "active",
+    tags: [],
+    notes_count: 0,
+    created_at: customer.created_at ?? null,
+    updated_at: customer.updated_at ?? null,
+    // Nombres computados por el backend
+    full_name: customer.full_name ?? getCustomerDisplayName(customer),
+    display_name: customer.display_name ?? getCustomerDisplayName(customer),
+  };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -95,56 +173,33 @@ function auditEntry(customerId, action, detail) {
 export async function listCustomers(params = {}) {
   const { type = "", status = "", search = "", page = 1, pageSize = 10 } = params;
 
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return get("/customers/", {
-  //   query: { type, status, search, page, page_size: pageSize },
-  // });
-  // ─────────────────────────────────────────────────────────────────────────
-
-  await mockDelay();
-
-  const normalizedSearch = search.trim().toLowerCase();
-
-  const filtered = mockStore.filter((customer) => {
-    if (type && customer.type !== type) return false;
-    if (status && customer.status !== status) return false;
-
-    if (normalizedSearch) {
-      const haystack = [
-        getCustomerDisplayName(customer),
-        customer.email,
-        customer.document_number,
-        customer.tax_id,
-        customer.phone,
-        customer.city,
-        customer.industry,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      if (!haystack.includes(normalizedSearch)) return false;
-    }
-
-    return true;
+  const response = await get("/customers/", {
+    query: {
+      customer_type: type || undefined,
+      status: status || undefined,
+      query: search || undefined,
+      page,
+      page_size: pageSize,
+      sort_by: "created_at",
+      sort_order: "desc",
+    },
   });
 
-  const start = (page - 1) * pageSize;
-  const items = filtered.slice(start, start + pageSize).map(clone);
+  const raw = response?.customers ?? [];
+  const items = raw.map(fromBackend);
 
   return {
     items,
-    total: filtered.length,
-    page,
-    pageSize,
+    total: Number(response?.total ?? raw.length),
+    page: Number(response?.page ?? page),
+    pageSize: Number(response?.page_size ?? pageSize),
     stats: {
-      ...MOCK_STATS,
-      total: mockStore.length,
-      natural: mockStore.filter((customer) => customer.type === "natural").length,
-      legal: mockStore.filter((customer) => customer.type === "legal").length,
-      active: mockStore.filter((customer) => customer.status === "active").length,
-      inactive: mockStore.filter((customer) => customer.status === "inactive").length,
-      archived: mockStore.filter((customer) => customer.status === "archived").length,
+      total: Number(response?.total ?? raw.length),
+      natural: raw.filter((c) => c.customer_type === "natural").length,
+      legal: raw.filter((c) => c.customer_type === "legal").length,
+      active: raw.filter((c) => c.status === "active").length,
+      inactive: raw.filter((c) => c.status === "inactive").length,
+      archived: raw.filter((c) => c.status === "archived").length,
     },
   };
 }
@@ -153,38 +208,26 @@ export async function listCustomers(params = {}) {
  * Obtiene un cliente por su id.
  */
 export async function getCustomer(id) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return get(`/customers/${id}`);
-  // ─────────────────────────────────────────────────────────────────────────
-
-  await mockDelay(300);
-
-  const customer = mockStore.find((item) => item.id === id);
+  const customer = await get(`/customers/${id}`);
 
   if (!customer) throw notFound(id);
 
-  return clone(customer);
+  return fromBackend(customer);
 }
 
 /**
  * Obtiene el cliente completo: datos + notas + historial + financiero.
  */
 export async function getCustomerFull(id) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return get(`/customers/${id}/full`);
-  // ─────────────────────────────────────────────────────────────────────────
+  const full = await get(`/customers/${id}/full`);
 
-  await mockDelay(450);
-
-  const customer = mockStore.find((item) => item.id === id);
-
-  if (!customer) throw notFound(id);
+  if (!full) throw notFound(id);
 
   return {
-    customer: clone(customer),
-    notes: (mockNotes[id] ?? []).map((note) => ({ ...note })),
-    audit: (mockAudit[id] ?? []).map((entry) => ({ ...entry })),
-    financial: { ...(MOCK_FINANCIAL[id] ?? emptyFinancial()) },
+    customer: fromBackend(full?.customer ?? full),
+    notes: Array.isArray(full?.notes) ? full.notes.map((n) => ({ ...n })) : [],
+    audit: Array.isArray(full?.audit) ? full.audit.map((a) => ({ ...a })) : [],
+    financial: { ...(full?.financial ?? {}) },
   };
 }
 
@@ -192,29 +235,19 @@ export async function getCustomerFull(id) {
  * Resumen financiero del cliente.
  */
 export async function getCustomerFinancial(id) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return get(`/customers/${id}/financial`);
-  // ─────────────────────────────────────────────────────────────────────────
+  const summary = await get(`/customers/${id}/financial`);
 
-  await mockDelay(350);
+  if (!summary) throw notFound(id);
 
-  const customer = mockStore.find((item) => item.id === id);
-
-  if (!customer) throw notFound(id);
-
-  return { ...(MOCK_FINANCIAL[id] ?? emptyFinancial()) };
-}
-
-function emptyFinancial() {
   return {
-    currency: "USD",
-    total_invoiced: 0,
-    total_paid: 0,
-    outstanding: 0,
-    invoices_count: 0,
+    currency: summary.currency ?? "USD",
+    total_invoiced: Number(summary.total_invoiced ?? 0),
+    total_paid: Number(summary.total_paid ?? 0),
+    outstanding: Number(summary.pending_balance ?? 0),
+    invoices_count: Number(summary.jobs_count ?? 0),
     pending_invoices: 0,
     average_ticket: 0,
-    last_invoice_date: null,
+    last_invoice_date: summary.last_job_at ?? null,
     last_payment_date: null,
   };
 }
@@ -225,97 +258,32 @@ function emptyFinancial() {
 
 /**
  * Crea un cliente (natural o legal).
- * El backend decide la variante según `payload.type`.
  */
 export async function createCustomer(payload) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return post("/customers/", payload);
-  // ─────────────────────────────────────────────────────────────────────────
+  const body = toBackendCreate(payload);
+  const created = await post("/customers/", body);
 
-  await mockDelay(600);
-
-  const customer = buildCustomer(payload);
-
-  mockStore = [customer, ...mockStore];
-  mockNotes = { ...mockNotes, [customer.id]: [] };
-  mockAudit = { ...mockAudit, [customer.id]: [] };
-  auditEntry(customer.id, "created", "Cliente creado");
-
-  return clone(customer);
+  return fromBackend(created);
 }
 
 /**
  * Crea una persona natural (POST /customers/natural).
  */
 export async function createNaturalCustomer(payload) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return post("/customers/natural", payload);
-  // ─────────────────────────────────────────────────────────────────────────
+  const body = toBackendCreate({ ...payload, type: "natural" });
+  const created = await post("/customers/natural", body);
 
-  await mockDelay(600);
-
-  const customer = buildCustomer({ ...payload, type: "natural" });
-
-  mockStore = [customer, ...mockStore];
-  mockNotes = { ...mockNotes, [customer.id]: [] };
-  mockAudit = { ...mockAudit, [customer.id]: [] };
-  auditEntry(customer.id, "created", "Cliente creado");
-
-  return clone(customer);
+  return fromBackend(created);
 }
 
 /**
  * Crea una persona jurídica (POST /customers/legal).
  */
 export async function createLegalCustomer(payload) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return post("/customers/legal", payload);
-  // ─────────────────────────────────────────────────────────────────────────
+  const body = toBackendCreate({ ...payload, type: "legal" });
+  const created = await post("/customers/legal", body);
 
-  await mockDelay(600);
-
-  const customer = buildCustomer({ ...payload, type: "legal" });
-
-  mockStore = [customer, ...mockStore];
-  mockNotes = { ...mockNotes, [customer.id]: [] };
-  mockAudit = { ...mockAudit, [customer.id]: [] };
-  auditEntry(customer.id, "created", "Cliente creado");
-
-  return clone(customer);
-}
-
-function buildCustomer(payload = {}) {
-  const now = new Date().toISOString();
-
-  return {
-    id: `cus_${String(mockStore.length + 1).padStart(3, "0")}`,
-    type: payload.type ?? "natural",
-    first_name: payload.first_name ?? null,
-    last_name: payload.last_name ?? null,
-    business_name: payload.business_name ?? null,
-    legal_name: payload.legal_name ?? null,
-    tax_id: payload.tax_id ?? null,
-    document_type: payload.document_type ?? "other",
-    document_number: payload.document_number ?? "",
-    email: payload.email ?? "",
-    phone: payload.phone ?? "",
-    birth_date: payload.birth_date || null,
-    incorporation_date: payload.incorporation_date || null,
-    industry: payload.industry ?? null,
-    website: payload.website ?? null,
-    address: payload.address ?? "",
-    city: payload.city ?? "",
-    state: payload.state ?? null,
-    country: payload.country ?? "",
-    contact_name: payload.contact_name ?? null,
-    contact_email: payload.contact_email ?? null,
-    contact_phone: payload.contact_phone ?? null,
-    status: CUSTOMER_STATUSES.ACTIVE,
-    tags: payload.tags ?? [],
-    notes_count: 0,
-    created_at: now,
-    updated_at: now,
-  };
+  return fromBackend(created);
 }
 
 /**
@@ -325,43 +293,30 @@ function buildCustomer(payload = {}) {
  * @returns {Promise<{ has_duplicates: boolean, duplicates: object[] }>}
  */
 export async function checkDuplicates(payload = {}) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return post("/customers/check-duplicates", payload);
-  // ─────────────────────────────────────────────────────────────────────────
+  const documentNumber = (payload.document_number ?? "").trim();
+  const email = (payload.email ?? "").trim();
+  const taxId = (payload.tax_id ?? "").trim();
+  const name = (payload.name ?? "").trim();
 
-  await mockDelay(500);
-
-  const documentNumber = (payload.document_number ?? "").trim().toLowerCase();
-  const email = (payload.email ?? "").trim().toLowerCase();
-  const taxId = (payload.tax_id ?? "").trim().toLowerCase();
-  const name = (payload.name ?? "").trim().toLowerCase();
-
-  const duplicates = mockStore.filter((customer) => {
-    if (documentNumber && customer.document_number?.toLowerCase() === documentNumber) return true;
-    if (taxId && customer.tax_id?.toLowerCase() === taxId) return true;
-    if (email && customer.email?.toLowerCase() === email) return true;
-    if (name && getCustomerDisplayName(customer).toLowerCase() === name) return true;
-
-    return false;
+  const response = await post("/customers/check-duplicates", {
+    identification_number: documentNumber || undefined,
+    tax_id_number: taxId || undefined,
+    email: email || undefined,
+    phone: undefined,
   });
+
+  const duplicates = Array.isArray(response?.duplicates) ? response.duplicates : [];
 
   return {
     has_duplicates: duplicates.length > 0,
     duplicates: duplicates.map((customer) => ({
       id: customer.id,
-      type: customer.type,
-      name: getCustomerDisplayName(customer),
+      type: customer.customer_type,
+      name: customer.display_name || getCustomerDisplayName(customer),
       email: customer.email,
-      document_number: customer.document_number,
+      document_number: customer.identification_number || customer.tax_id_number,
       status: customer.status,
-      match_reason:
-        documentNumber && customer.document_number?.toLowerCase() === documentNumber
-          ? "documento"
-          : taxId && customer.tax_id?.toLowerCase() === taxId
-            ? "identificador fiscal"
-            : email && customer.email?.toLowerCase() === email
-              ? "correo electrónico"
-              : "nombre",
+      match_reason: "coincidencia",
     })),
   };
 }
@@ -374,104 +329,62 @@ export async function checkDuplicates(payload = {}) {
  * Actualiza parcialmente un cliente.
  */
 export async function updateCustomer(id, payload) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return patch(`/customers/${id}`, payload);
-  // ─────────────────────────────────────────────────────────────────────────
+  const isLegal = payload.type === "legal";
 
-  await mockDelay(550);
+  const body = {};
+  if (payload.first_name !== undefined) body.first_name = payload.first_name;
+  if (payload.last_name !== undefined) body.last_name = payload.last_name;
+  if (payload.legal_name !== undefined) body.business_name = payload.legal_name;
+  if (payload.business_name !== undefined) body.trade_name = payload.business_name;
+  if (payload.tax_id !== undefined) body.tax_id_number = payload.tax_id;
+  if (payload.document_type !== undefined) {
+    if (isLegal) body.tax_id_type = payload.document_type;
+    else body.identification_type = payload.document_type;
+  }
+  if (payload.document_number !== undefined) {
+    if (isLegal) body.tax_id_number = payload.document_number;
+    else body.identification_number = payload.document_number;
+  }
+  if (payload.email !== undefined) body.email = payload.email;
+  if (payload.phone !== undefined) body.phone = payload.phone;
+  if (payload.address !== undefined) body.address = payload.address;
+  if (payload.city !== undefined) body.city = payload.city;
+  if (payload.state !== undefined) body.department = payload.state;
+  if (payload.country !== undefined) body.country = payload.country;
+  if (payload.website !== undefined) body.website = payload.website;
+  if (payload.industry !== undefined) body.economic_activity = payload.industry;
+  if (payload.contact_name !== undefined) body.main_contact_name = payload.contact_name;
 
-  const index = mockStore.findIndex((item) => item.id === id);
+  const updated = await patch(`/customers/${id}`, body);
 
-  if (index === -1) throw notFound(id);
-
-  const updated = {
-    ...mockStore[index],
-    ...payload,
-    updated_at: new Date().toISOString(),
-  };
-
-  mockStore = mockStore.map((item, itemIndex) => (itemIndex === index ? updated : item));
-  auditEntry(id, "updated", "Se actualizaron los datos del cliente");
-
-  return clone(updated);
+  return fromBackend(updated);
 }
 
 /**
  * Cambia el estado del cliente (active / inactive / archived).
  */
 export async function updateCustomerStatus(id, status) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return patch(`/customers/${id}/status`, { status });
-  // ─────────────────────────────────────────────────────────────────────────
+  const updated = await patch(`/customers/${id}/status`, { status });
 
-  await mockDelay(400);
-
-  const index = mockStore.findIndex((item) => item.id === id);
-
-  if (index === -1) throw notFound(id);
-
-  const updated = {
-    ...mockStore[index],
-    status,
-    updated_at: new Date().toISOString(),
-  };
-
-  mockStore = mockStore.map((item, itemIndex) => (itemIndex === index ? updated : item));
-  auditEntry(id, "status_changed", `Estado cambiado a ${status}`);
-
-  return clone(updated);
+  return fromBackend(updated);
 }
 
 /**
  * Reactiva un cliente archivado.
  */
 export async function reactivateCustomer(id) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return post(`/customers/${id}/reactivate`, {});
-  // ─────────────────────────────────────────────────────────────────────────
+  const updated = await post(`/customers/${id}/reactivate`, {});
 
-  await mockDelay(450);
-
-  const index = mockStore.findIndex((item) => item.id === id);
-
-  if (index === -1) throw notFound(id);
-
-  const updated = {
-    ...mockStore[index],
-    status: CUSTOMER_STATUSES.ACTIVE,
-    updated_at: new Date().toISOString(),
-  };
-
-  mockStore = mockStore.map((item, itemIndex) => (itemIndex === index ? updated : item));
-  auditEntry(id, "reactivated", "Cliente reactivado");
-
-  return clone(updated);
+  return fromBackend(updated);
 }
 
 /**
  * Archiva un cliente (soft delete en el backend).
  */
 export async function archiveCustomer(id) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return del(`/customers/${id}`);
-  // ─────────────────────────────────────────────────────────────────────────
+  await del(`/customers/${id}`);
 
-  await mockDelay(450);
-
-  const index = mockStore.findIndex((item) => item.id === id);
-
-  if (index === -1) throw notFound(id);
-
-  const updated = {
-    ...mockStore[index],
-    status: CUSTOMER_STATUSES.ARCHIVED,
-    updated_at: new Date().toISOString(),
-  };
-
-  mockStore = mockStore.map((item, itemIndex) => (itemIndex === index ? updated : item));
-  auditEntry(id, "archived", "Cliente archivado");
-
-  return clone(updated);
+  return { id };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -482,54 +395,27 @@ export async function archiveCustomer(id) {
  * Lista las notas internas de un cliente.
  */
 export async function listCustomerNotes(id, params = {}) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return get(`/customers/${id}/notes`, { query: params });
-  // ─────────────────────────────────────────────────────────────────────────
+  const { page = 1, page_size = 20 } = params;
 
-  await mockDelay(350);
+  const response = await get(`/customers/${id}/notes`, {
+    query: { page, page_size },
+  });
 
-  const customer = mockStore.find((item) => item.id === id);
+  const notes = Array.isArray(response?.notes) ? response.notes : [];
 
-  if (!customer) throw notFound(id);
-
-  const notes = [...(mockNotes[id] ?? [])].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
-
-  return { items: notes.map((note) => ({ ...note })), total: notes.length };
+  return {
+    items: notes.map((note) => ({ ...note })),
+    total: Number(response?.total ?? notes.length),
+  };
 }
 
 /**
  * Agrega una nota interna.
  */
 export async function addCustomerNote(id, payload) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return post(`/customers/${id}/notes`, payload);
-  // ─────────────────────────────────────────────────────────────────────────
-
-  await mockDelay(450);
-
-  const customer = mockStore.find((item) => item.id === id);
-
-  if (!customer) throw notFound(id);
-
-  const notes = mockNotes[id] ?? [];
-  const now = new Date().toISOString();
-
-  const note = {
-    id: `not_${Date.now().toString(36)}`,
-    customer_id: id,
+  const note = await post(`/customers/${id}/notes`, {
     content: payload.content,
-    author: payload.author ?? "Ana Morales",
-    created_at: now,
-    updated_at: now,
-  };
-
-  mockNotes = { ...mockNotes, [id]: [note, ...notes] };
-  mockStore = mockStore.map((item) =>
-    item.id === id ? { ...item, notes_count: notes.length + 1 } : item,
-  );
-  auditEntry(id, "note_added", "Se agregó una nota interna");
+  });
 
   return { ...note };
 }
@@ -538,33 +424,9 @@ export async function addCustomerNote(id, payload) {
  * Actualiza una nota interna.
  */
 export async function updateCustomerNote(id, noteId, payload) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return patch(`/customers/${id}/notes/${noteId}`, payload);
-  // ─────────────────────────────────────────────────────────────────────────
-
-  await mockDelay(400);
-
-  const notes = mockNotes[id] ?? [];
-  const index = notes.findIndex((note) => note.id === noteId);
-
-  if (index === -1) {
-    const error = new Error("No encontramos la nota solicitada.");
-    error.code = "NOTE_NOT_FOUND";
-    error.status = 404;
-    throw error;
-  }
-
-  const updated = {
-    ...notes[index],
-    ...payload,
-    updated_at: new Date().toISOString(),
-  };
-
-  mockNotes = {
-    ...mockNotes,
-    [id]: notes.map((note, noteIndex) => (noteIndex === index ? updated : note)),
-  };
-  auditEntry(id, "note_updated", "Se actualizó una nota interna");
+  const updated = await patch(`/customers/${id}/notes/${noteId}`, {
+    content: payload.content,
+  });
 
   return { ...updated };
 }
@@ -573,27 +435,7 @@ export async function updateCustomerNote(id, noteId, payload) {
  * Elimina una nota interna.
  */
 export async function deleteCustomerNote(id, noteId) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return del(`/customers/${id}/notes/${noteId}`);
-  // ─────────────────────────────────────────────────────────────────────────
-
-  await mockDelay(400);
-
-  const notes = mockNotes[id] ?? [];
-  const exists = notes.some((note) => note.id === noteId);
-
-  if (!exists) {
-    const error = new Error("No encontramos la nota solicitada.");
-    error.code = "NOTE_NOT_FOUND";
-    error.status = 404;
-    throw error;
-  }
-
-  mockNotes = { ...mockNotes, [id]: notes.filter((note) => note.id !== noteId) };
-  mockStore = mockStore.map((item) =>
-    item.id === id ? { ...item, notes_count: Math.max(0, item.notes_count - 1) } : item,
-  );
-  auditEntry(id, "note_deleted", "Se eliminó una nota interna");
+  await del(`/customers/${id}/notes/${noteId}`);
 
   return { id: noteId };
 }
@@ -606,38 +448,16 @@ export async function deleteCustomerNote(id, noteId) {
  * Historial de auditoría del cliente.
  */
 export async function getCustomerAudit(id, params = {}) {
-  // ── Integración real ──────────────────────────────────────────────────────
-  // return get(`/customers/${id}/audit`, { query: params });
-  // ─────────────────────────────────────────────────────────────────────────
+  const { page = 1, page_size = 20 } = params;
 
-  await mockDelay(350);
+  const response = await get(`/customers/${id}/audit`, {
+    query: { page, page_size },
+  });
 
-  const customer = mockStore.find((item) => item.id === id);
+  const entries = Array.isArray(response?.logs) ? response.logs : [];
 
-  if (!customer) throw notFound(id);
-
-  const entries = [...(mockAudit[id] ?? [])].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
-
-  return { items: entries.map((entry) => ({ ...entry })), total: entries.length };
-}
-
-/**
- * Reinicia los stores ficticios (útil durante el desarrollo).
- */
-export function resetMockCustomers() {
-  mockStore = MOCK_CUSTOMERS.map((customer) => ({ ...customer }));
-  mockNotes = Object.fromEntries(
-    Object.entries(MOCK_NOTES).map(([customerId, notes]) => [
-      customerId,
-      notes.map((note) => ({ ...note })),
-    ]),
-  );
-  mockAudit = Object.fromEntries(
-    Object.entries(MOCK_AUDIT).map(([customerId, entries]) => [
-      customerId,
-      entries.map((entry) => ({ ...entry })),
-    ]),
-  );
+  return {
+    items: entries.map((entry) => ({ ...entry })),
+    total: Number(response?.total ?? entries.length),
+  };
 }
